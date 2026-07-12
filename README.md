@@ -2,7 +2,7 @@
 
 Standalone BepInEx 5 plugin for [Hadean Tactics](https://store.steampowered.com/app/1324530/Hadean_Tactics/).
 
-Auto-sells runes when they are added to `RelicManager.currentRunes`, using a Silksong-style Harmony `TargetMethod` + `AccessTools.TypeByName` patch on `InstantiateContainer`.
+Auto-sells runes via Harmony postfixes on `RelicManager.CreateRune` that call `RelicBehavior.OnSell()`.
 
 ## Setup
 
@@ -13,15 +13,29 @@ Auto-sells runes when they are added to `RelicManager.currentRunes`, using a Sil
 dotnet build -c Debug
 ```
 
-The DLL is copied to `BepInEx/plugins/AutoSellRunes/`.
+DLL is copied to `BepInEx/plugins/AutoSellRunes/`.
 
 ## Config
 
 `BepInEx/config/AutoSellRunes.cfg`
 
-- **Enabled** — master switch (default true)
-- **Debug** — log when the postfix runs / sells
+| Setting | Default | Meaning |
+|---------|---------|---------|
+| Enabled | true | Master switch |
+| Debug | true | Log Harmony hits / sells |
+| Use poll fallback | **false** | Poll `currentRunes` if Harmony misses |
+| Poll interval seconds | 1 | Only used when poll is on |
 
-## Note
+To test Harmony-only, set `Use poll fallback = false` (change it in the cfg if an older install saved `true`).
 
-Disable or remove any older AutoSellRunes code inside DebuggingAdventures so you only have one seller.
+## Harmony hooks
+
+- `CreateRune(EffectContainer)` — reward/shop path; sells last `currentRunes` entry
+- `CreateRune(string)` — id/save path; sells `__result`
+
+With Debug on, a successful Harmony sell looks like:
+
+```
+[Harmony OK] CreateRune(EffectContainer) id=...
+CreateRune(EffectContainer): OnSell -> RelicPrefab(Clone)
+```

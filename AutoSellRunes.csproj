@@ -14,7 +14,7 @@
   <PropertyGroup>
     <BepInExPluginGuid>AutoSellRunes</BepInExPluginGuid>
     <BepInExPluginName>AutoSellRunes</BepInExPluginName>
-    <Version>0.1.0</Version>
+    <Version>0.2.0</Version>
   </PropertyGroup>
 
   <ItemGroup>
@@ -22,6 +22,7 @@
     <PackageReference Include="BepInEx.Core" Version="5.4.21" />
     <PackageReference Include="BepInEx.PluginInfoProps" Version="1.1.0" />
     <PackageReference Include="NuggetTactics.SDK" Version="1.0.2" />
+    <PackageReference Include="HarmonyX" Version="2.10.0" />
   </ItemGroup>
 
   <Target Name="CopyMod" AfterTargets="PostBuildEvent" Condition="'$(HadeanTacticsDir)' != ''">

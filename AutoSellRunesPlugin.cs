@@ -25,15 +25,7 @@ public class AutoSellRunesPlugin : BaseUnityPlugin
     {
         Log = Logger;
 
-        Enabled = Config.Bind("General", "Enabled", true, "Auto-sell runes when CreateRune adds one.");
-        DebugLogging = Config.Bind("General", "Debug", true, "Verbose logging.");
-        UsePollFallback = Config.Bind(
-            "General",
-            "Use poll fallback",
-            false,
-            "Poll currentRunes if Harmony CreateRune hooks miss. Leave off to test Harmony-only.");
-        PollIntervalSeconds = Config.Bind("General", "Poll interval seconds", 1f, "Poll rate when fallback is on.");
-
+        InitializeConfig();
         _harmony = Harmony.CreateAndPatchAll(Assembly.GetExecutingAssembly(), PluginInfo.PLUGIN_GUID);
 
         // Always create the poller — it no-ops until UsePollFallback is on (including mid-game toggles).
@@ -89,70 +81,83 @@ public class AutoSellRunesPlugin : BaseUnityPlugin
             Log.LogError($"{source}: OnSell failed: {ex}");
         }
     }
+
+    private void SellAllRunes()
+    {
+        RelicManager relicManager = FindObjectOfType<RelicManager>();
+        if (relicManager != null) 
+        {
+            while (relicManager.currentRunes?.Count > 0)
+            {
+                SellLatestRune(relicManager, "Sell All Runes");
+            }
+        }
+    }
+
+    private void InitializeConfig()
+    {
+        Enabled = Config.Bind("General", "Enabled", true, new ConfigDescription("Auto-sell runes when CreateRune adds one.", null, new ConfigurationManagerAttributes { Order = 1 }));
+        DebugLogging = Config.Bind("Debug", "Debug", true, new ConfigDescription("Verbose logging.", null, new ConfigurationManagerAttributes { Order = 2 }));
+        UsePollFallback = Config.Bind("Backup", "Use poll fallback", false, new ConfigDescription("Poll currentRunes if Harmony CreateRune hooks miss. Leave off to test Harmony-only.", null, new ConfigurationManagerAttributes { Order = 3 }));
+        PollIntervalSeconds = Config.Bind("Backup", "Poll interval seconds", 1f, new ConfigDescription("Poll rate when fallback is on.", null, new ConfigurationManagerAttributes { Order = 4 }));
+        Config.Bind(
+            "General",
+            "Sell All Runes",
+            0,
+            new ConfigDescription(
+                "Sell all runes currently held.",
+                null,
+                new ConfigurationManagerAttributes
+                {
+                    CustomDrawer = _ =>
+                    {
+                        if (GUILayout.Button("Sell", GUILayout.ExpandWidth(true)))
+                            SellAllRunes();
+                    },
+                    HideDefaultButton = true, // hides Reset
+                }
+            )
+        );
+    }
 }
 
-/// <summary>
-/// Reward / shop path: CreateRune(EffectContainer) -> InstantiateContainer -> currentRunes.
-/// Void return — sell the last entry after the method finishes.
-/// </summary>
 [HarmonyPatch]
-internal static class RelicManager_CreateRune_EffectContainer_Patch
+internal static class RelicManager_InstantiateContainer_Patch
 {
     private static MethodBase TargetMethod()
     {
-        // Prefer full name — short name can miss or hit the wrong type.
-        Type? type = AccessTools.TypeByName("HadeanTactics.RelicManager")
-            ?? throw new Exception("Could not find type HadeanTactics.RelicManager");
-
-        // Must disambiguate: CreateRune(string) vs CreateRune(EffectContainer).
-        MethodInfo? method = AccessTools.Method(type, "CreateRune", new[] { typeof(EffectContainer) });
+        Type type = AccessTools.TypeByName("HadeanTactics.RelicManager")
+            ?? throw new Exception("Could not find RelicManager");
+        MethodInfo? method = AccessTools.Method(
+            type,
+            "InstantiateContainer",
+            new[]
+            {
+                typeof(EffectContainer),
+                typeof(Transform),
+                typeof(List<RelicBehavior>),
+                typeof(bool),
+                typeof(bool),
+                typeof(TeamType),
+            });
         if (method == null)
-            throw new Exception("Could not find RelicManager.CreateRune(EffectContainer)");
-
+            throw new Exception("Could not find RelicManager.InstantiateContainer");
         return method;
     }
 
-    private static void Postfix(object __instance)
+    private static void Postfix(RelicManager __instance, List<RelicBehavior> __2, RelicBehavior __result)
     {
-        // CreateRune(EffectContainer) is void — no __result. Sell last currentRunes entry.
-        if (AutoSellRunesPlugin.DebugLogging.Value)
-            AutoSellRunesPlugin.Log.LogInfo("[Harmony OK] CreateRune(EffectContainer)");
+        if (!AutoSellRunesPlugin.Enabled.Value || __result == null) return;
 
-        if (__instance is RelicManager manager)
-            AutoSellRunesPlugin.SellLatestRune(manager, "CreateRune(EffectContainer)");
-    }
-}
+        if (__2 == null || !ReferenceEquals(__2, __instance.currentRunes)) return;
 
-/// <summary>
-/// Save / id path — returns the created RelicBehavior.
-/// </summary>
-[HarmonyPatch]
-internal static class RelicManager_CreateRune_String_Patch
-{
-    private static MethodBase TargetMethod()
-    {
-        // Prefer full name — short name can miss or hit the wrong type.
-        Type? type = AccessTools.TypeByName("HadeanTactics.RelicManager")
-            ?? throw new Exception("Could not find type HadeanTactics.RelicManager");
+        if (__instance._manager != null && __instance._manager.state == GameState.Loading) return;
 
-        // Must disambiguate: CreateRune(string) vs CreateRune(EffectContainer).
-        MethodInfo? method = AccessTools.Method(type, "CreateRune", new[] { typeof(string) });
-        if (method == null)
-            throw new Exception("Could not find RelicManager.CreateRune(string)");
+        if (__result.relic != null && __result.relic.containerType != EffectContainerType.rune) return;
+        
+        if (AutoSellRunesPlugin.DebugLogging.Value) AutoSellRunesPlugin.Log.LogInfo($"[Harmony OK] InstantiateContainer");
 
-        return method;
-    }
-
-    private static void Postfix(object __instance, object __result)
-    {
-        if (AutoSellRunesPlugin.DebugLogging.Value)
-            AutoSellRunesPlugin.Log.LogInfo($"[Harmony OK] CreateRune(string) result={__result}");
-
-        // Optional: keep typed helpers by casting if you still reference HadeanTactics.
-        if (__result is RelicBehavior rune)
-            AutoSellRunesPlugin.SellRune(rune, "CreateRune(string)");
-        else if (__instance is RelicManager manager)
-            AutoSellRunesPlugin.SellLatestRune(manager, "CreateRune(string)");
+        AutoSellRunesPlugin.SellRune(__result, "InstantiateContainer");
     }
 }
 

@@ -14,7 +14,7 @@
   <PropertyGroup>
     <BepInExPluginGuid>AutoSellRunes</BepInExPluginGuid>
     <BepInExPluginName>AutoSellRunes</BepInExPluginName>
-    <Version>0.2.0</Version>
+    <Version>0.3.0</Version>
   </PropertyGroup>
 
   <ItemGroup>
@@ -23,6 +23,13 @@
     <PackageReference Include="BepInEx.PluginInfoProps" Version="1.1.0" />
     <PackageReference Include="NuggetTactics.SDK" Version="1.0.2" />
     <PackageReference Include="HarmonyX" Version="2.10.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Reference Include="UnityEngine.IMGUIModule" Condition="Exists('$(HadeanTacticsManaged)\UnityEngine.IMGUIModule.dll')">
+      <HintPath>$(HadeanTacticsManaged)\UnityEngine.IMGUIModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
   </ItemGroup>
 
   <Target Name="CopyMod" AfterTargets="PostBuildEvent" Condition="'$(HadeanTacticsDir)' != ''">
